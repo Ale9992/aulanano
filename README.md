@@ -37,6 +37,25 @@ Ogni strumento si adatta al **profilo dello studente** (primaria, secondaria di 
 |---|---|
 | ![Leggibilità](docs/screenshots/leggibilita.png) | ![Menu strumenti](docs/screenshots/strumenti.png) |
 
+### Modelli open source da Hugging Face
+
+Oltre a Gemini Nano, dalla finestra **Modelli** si possono scaricare con un clic modelli open source da [Hugging Face](https://huggingface.co), che girano **direttamente nel browser** grazie a [Transformers.js](https://huggingface.co/docs/transformers.js):
+
+| Famiglia | Modelli nel catalogo |
+|---|---|
+| Google Gemma 3 | 270M, 1B |
+| Meta Llama 3.2 | 1B, 3B |
+| Alibaba Qwen | Qwen2.5 0.5B e 1.5B, Qwen3 0.6B, 1.7B e 4B |
+| Hugging Face SmolLM2 | 360M, 1.7B |
+| Microsoft Phi | Phi-3.5 mini |
+
+- L'app sceglie da sola **dispositivo e quantizzazione**: WebGPU con `q4f16` se c'è una scheda video compatibile, altrimenti CPU (WebAssembly) con `q4`.
+- I modelli restano nella **cache del browser** e funzionano anche offline; si possono eliminare in qualsiasi momento. Prima del download l'app controlla lo spazio disponibile.
+- Su CPU i modelli usano più core solo se la pagina è *cross-origin isolated*: il bridge e l'app desktop inviano le intestazioni necessarie (`Cross-Origin-Opener-Policy` e `Cross-Origin-Embedder-Policy`), mentre il semplice `python3 -m http.server` della modalità locale no, quindi lì il modello usa un solo core.
+- Una **ricerca nell'Hub** permette di aggiungere altri modelli: AulaNano verifica che abbiano file ONNX compatibili prima di proporli.
+- Utili quando Gemini Nano non è disponibile (browser diverso da Chrome, hardware non idoneo). Con un modello Hugging Face funzionano la chat e tutte le funzioni Scuola; Riassumi, Traduci, Scrivi e Riscrivi diventano richieste al modello. Immagini e correzione restano esclusive di Gemini Nano.
+- Ogni modello ha la propria licenza (Apache 2.0, MIT, Llama 3.2 Community License, Gemma Terms of Use), indicata nella scheda.
+
 ### Funzioni generali del modello
 
 Chat con memoria della conversazione, immagini in input e output strutturato (JSON Schema); riassunti, traduzione con rilevamento automatico della lingua, scrittura e riscrittura, correzione grammaticale (inglese). Cronologia delle chat, tema chiaro e scuro, interfaccia responsive.
@@ -63,7 +82,8 @@ La modalità server è utile quando il PC non ha i requisiti per Gemini Nano: un
 
 ### Aspetti tecnici
 
-- **Zero dipendenze**: solo HTML/CSS/JavaScript nel browser e Node.js standard lato server.
+- **Zero dipendenze installate**: solo HTML/CSS/JavaScript nel browser e Node.js standard lato server. Transformers.js viene caricato da CDN solo quando si sceglie un modello Hugging Face.
+- **Adattatore Prompt API ↔ Transformers.js**: i modelli Hugging Face espongono la stessa interfaccia di `LanguageModel` (sessioni, streaming, interruzione, finestra di contesto, output JSON), quindi tutte le funzioni li usano senza modifiche.
 - **Client CDP scritto da zero** (`server/cdp.mjs`): WebSocket minimale per comandare Chrome headless tramite Chrome DevTools Protocol.
 - **Streaming** delle risposte via NDJSON dal bridge al browser, con interruzione delle generazioni.
 - **Output strutturato** con `responseConstraint` (JSON Schema) per mappe, glossari e domande, con nuovo tentativo automatico quando il risultato è incompleto.
@@ -134,6 +154,7 @@ docs/screenshots/     immagini del README
 - **Lingue**: le lingue di output dichiarate ufficialmente per la Prompt API sono inglese, spagnolo, francese, tedesco e giapponese; l'italiano funziona ma senza garanzie.
 - **Flag sperimentali**: alcune impostazioni (variante CPU, `BypassPerfRequirement`) non sono supportate ufficialmente da Google e possono smettere di funzionare con un aggiornamento di Chrome.
 - **Prestazioni**: su CPU ogni materiale richiede 15–60 secondi; con una GPU adatta è molto più veloce.
+- **Modelli Hugging Face**: i modelli sotto 1 miliardo di parametri sono rapidi ma spesso imprecisi, soprattutto in italiano e con le funzioni che producono JSON (mappe, glossari, domande); per un uso reale sono consigliati Qwen2.5 1.5B, Qwen3 1.7B o superiori. Il download avviene da huggingface.co.
 
 ## English summary
 

@@ -235,7 +235,8 @@ function startServer(state) {
   const indexHtml = asset('index.html');
   const studioHtml = asset('studio.html');
   const server = http.createServer(async (req, res) => {
-    const send = (code, type, body) => { res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store' }); res.end(body); };
+    // isolamento cross-origin: permette a Transformers.js di usare più core della CPU
+    const send = (code, type, body) => { res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless' }); res.end(body); };
     try {
       if (req.method === 'GET' && req.url === '/') {
         const inject = `<script>window.__APP=${JSON.stringify(info(state))}</script>\n<script>`;

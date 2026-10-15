@@ -21,6 +21,7 @@ const PROFILE = `${BASE}/profile`;
 const WEB = process.env.GN_WEB || path.join(HERE, '..', 'web');
 const STUDIO = `${WEB}/studio.html`;
 const CHAT = `${WEB}/index.html`;
+const ISOLATION = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless' };
 const LABEL = process.env.GN_LABEL || 'un server della tua rete'; // come viene descritto il server nell'interfaccia
 
 // Equivalente di chrome://flags (nome@indice-opzione). I nomi sconosciuti vengono ignorati da Chrome.
@@ -146,7 +147,8 @@ const server = http.createServer(async (req, res) => {
       try { apis = await callWorker({ op: 'apis' }); info = await callWorker({ op: 'info' }); } catch {}
       const inject = `<script>window.__REMOTE=${JSON.stringify({ host: LABEL, apis, info })}</script><script src="/shim.js"></script>\n<script>`;
       const html = fs.readFileSync(PAGES[url.pathname], 'utf8').replace(/<script>/, inject);
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      // isolamento cross-origin: permette a Transformers.js (modelli Hugging Face) di usare più core della CPU
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...ISOLATION });
       return res.end(html);
     }
     if (req.method === 'GET' && url.pathname === '/api/health') {

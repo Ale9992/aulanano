@@ -188,6 +188,27 @@ footer{flex:none;padding:0 20px 10px}
 #about ul{padding-left:1.2em;font-size:14px} #about li{margin-bottom:6px} #about p{font-size:14px} #about a{color:var(--accent)}
 #toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:var(--send);color:var(--send-ink);padding:10px 16px;border-radius:12px;font-size:14px;z-index:60;max-width:min(560px,calc(100vw - 32px));box-shadow:var(--shadow)}
 
+/* modelli */
+.model-chip{display:inline-flex;align-items:center;gap:7px;font-size:13px;border:1px solid var(--line);border-radius:999px;padding:4px 12px;color:var(--muted);margin-left:2px;max-width:220px}
+.model-chip span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.model-chip:hover{background:var(--side-hover);color:var(--ink)}
+.mcard{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.mcard.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.mcard-top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.mcard-name{font-weight:700}
+.mcard-org{color:var(--muted);font-size:13px}
+.mcard-desc{font-size:13.5px;color:var(--muted);margin:2px 0 6px}
+.mcard-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.mcard-actions a{font-size:12.5px;color:var(--muted);margin-left:auto}
+.mcard .progress{max-width:none;margin:6px 0 2px}
+.tag{font-size:11.5px;border:1px solid var(--line);border-radius:999px;padding:0 8px;color:var(--muted);white-space:nowrap}
+.tag.ok{color:var(--ok);border-color:var(--ok)} .tag.acc{color:var(--accent);border-color:var(--accent)} .tag.warn{color:var(--warn);border-color:var(--warn)}
+#modelsBody .hint{font-size:12.5px;color:var(--muted);margin:0 0 10px}
+.search-row{display:flex;gap:8px;margin-bottom:8px}
+.search-row input{flex:1;font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:7px 10px}
+.hf-res{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.hf-res .id{flex:1;overflow-wrap:anywhere}
+
 /* leggibilità */
 .read-panel{padding:14px;min-width:300px}
 .read-panel .field{margin-bottom:10px}
@@ -260,6 +281,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="menu" id="toolMenu"></div>
       </div>
+      <button class="model-chip" id="modelBtn" title="Scegli o scarica un modello"><span class="dot" id="modelDot"></span><span id="modelName">Gemini Nano</span></button>
       <span class="spacer"></span>
       <div class="pop-wrap">
         <button class="icon-btn" id="readBtn" title="Leggibilità: carattere, spaziatura, sfondo" style="width:auto;padding:0 10px;font-weight:700;font-family:Verdana,sans-serif">Aa</button>
@@ -372,6 +394,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
       <li>Il modello gira sul computer (o su un server della tua rete): i testi non vengono inviati a servizi cloud. Le chat restano salvate solo in questo browser.</li>
       <li><strong>Non inserire nomi, diagnosi, contenuti del PDP o altri dati personali degli studenti.</strong> Le informazioni su DSA e BES sono dati relativi alla salute, tutelati in modo rafforzato dal GDPR.</li>
       <li>La dettatura online (disattivata se non la abiliti tu) invierebbe l'audio a Google.</li>
+      <li>I modelli Hugging Face vengono scaricati da huggingface.co (che vede l'indirizzo IP del computer) ma poi girano nel browser: i testi non vengono inviati. Ogni modello ha la sua licenza, indicata nella sua pagina.</li>
     </ul>
     <div class="section-title">Uso responsabile</div>
     <ul>
@@ -381,6 +404,11 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
     </ul>
     <div style="text-align:right;margin-top:16px"><button class="btn primary" id="aboutOk">Ho capito</button></div>
   </div>
+</dialog>
+
+<dialog id="models">
+  <div class="dlg-head"><h2>Modelli</h2><button class="icon-btn" id="closeModels">✕</button></div>
+  <div class="dlg-body" id="modelsBody"></div>
 </dialog>
 
 <div id="setup" hidden>
@@ -511,7 +539,7 @@ const store = {
 const DEFAULT_READ = { font: '', size: 16, lh: 1.6, ls: 0, ws: 0, paper: '' };
 let settings = Object.assign({
   system: 'Sei un assistente utile, preciso e cordiale. Rispondi nella lingua dell\'utente.', lang: '', theme: '', temp: '', topK: '', schema: '',
-  tool: 'chat', toolOpts: {}, level: '', levelChat: false, dictOnline: false, tts: { voice: '', rate: 1 }, read: { ...DEFAULT_READ },
+  tool: 'chat', toolOpts: {}, model: 'nano', hfModels: [], level: '', levelChat: false, dictOnline: false, tts: { voice: '', rate: 1 }, read: { ...DEFAULT_READ },
 }, store.get('gn-settings', {}));
 settings.read = { ...DEFAULT_READ, ...settings.read };
 settings.tts = { voice: '', rate: 1, ...settings.tts };
@@ -635,9 +663,9 @@ const stripMd = s => String(s || '').replace(/```[\w+-]*\n?/g, '').replace(/[*_`
 const dot = s => String(s || '').trim().replace(/[.!?…]*$/, '.'); // una sola chiusura di frase
 const norm = s => String(s || '').trim().toLowerCase().replace(/[.!?]$/, '');
 function correctIndex(q) {
-  const r = norm(q.risposta);
-  let i = q.opzioni.findIndex(o => norm(o) === r);
-  if (i < 0) i = q.opzioni.findIndex(o => norm(o).includes(r) || r.includes(norm(o)));
+  const r = norm(q.risposta), ops = q.opzioni || [];
+  let i = ops.findIndex(o => norm(o) === r);
+  if (i < 0) i = ops.findIndex(o => norm(o).includes(r) || r.includes(norm(o)));
   return i;
 }
 const RENDER = {
@@ -761,8 +789,8 @@ function setTool(k, persist = true) {
   tool = k;
   const t = TOOLS[k];
   $('toolLabel').textContent = t.label;
-  $('input').placeholder = t.placeholder;
-  $('attachBtn').hidden = !t.images;
+  $('input').placeholder = k === 'chat' ? `Scrivi un messaggio a ${modelLabel()}` : t.placeholder;
+  $('attachBtn').hidden = !t.images || usingHF();
   if (!t.images) { attachments = []; renderAttachments(); }
   if (persist) { settings.tool = k; saveSettings(); }
   renderToolOptions(); renderSuggestions(); updateSend(); updateCtx();
@@ -1105,6 +1133,384 @@ function stopReading() {
   $('player').hidden = true;
 }
 
+/* ================= modelli Hugging Face (Transformers.js, nel browser) ================= */
+const TF_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.min.js';
+// dimensioni indicative in MB: [con WebGPU, solo CPU]; null = richiede WebGPU
+const CATALOG = [
+  { id: 'onnx-community/gemma-3-270m-it-ONNX', name: 'Gemma 3 270M', org: 'Google', desc: 'Minuscolo e velocissimo: adatto a prove e testi brevi.', size: [260, 308], lic: 'Gemma' },
+  { id: 'HuggingFaceTB/SmolLM2-360M-Instruct', name: 'SmolLM2 360M', org: 'Hugging Face', desc: 'Molto leggero, pensato soprattutto per l\'inglese.', size: [260, 369], lic: 'Apache 2.0' },
+  { id: 'onnx-community/Qwen2.5-0.5B-Instruct', name: 'Qwen2.5 0.5B', org: 'Alibaba', desc: 'Leggero e multilingue: buon punto di partenza per l\'italiano.', size: [460, 749], lic: 'Apache 2.0', it: true },
+  { id: 'onnx-community/Qwen3-0.6B-ONNX', name: 'Qwen3 0.6B', org: 'Alibaba', desc: 'Generazione più recente di Qwen, multilingue.', size: [543, 876], lic: 'Apache 2.0', it: true },
+  { id: 'onnx-community/gemma-3-1b-it-ONNX', name: 'Gemma 3 1B', org: 'Google', desc: 'Modello aperto della stessa famiglia di Gemini, buono in italiano.', size: [727, 819], lic: 'Gemma', it: true },
+  { id: 'onnx-community/Llama-3.2-1B-Instruct-ONNX', name: 'Llama 3.2 1B', org: 'Meta', desc: 'Il più piccolo dei Llama 3.2, multilingue (italiano incluso).', size: [1039, 1614], lic: 'Llama 3.2', it: true },
+  { id: 'HuggingFaceTB/SmolLM2-1.7B-Instruct', name: 'SmolLM2 1.7B', org: 'Hugging Face', desc: 'Buono in inglese, meno in italiano.', size: [1057, 1346], lic: 'Apache 2.0' },
+  { id: 'onnx-community/Qwen2.5-1.5B-Instruct', name: 'Qwen2.5 1.5B', org: 'Alibaba', desc: 'Più affidabile per le funzioni Scuola, ancora gestibile senza GPU.', size: [1165, 1704], lic: 'Apache 2.0', it: true, rec: true },
+  { id: 'onnx-community/Qwen3-1.7B-ONNX', name: 'Qwen3 1.7B', org: 'Alibaba', desc: 'Ottimo rapporto tra qualità e dimensione, multilingue.', size: [1360, 2047], lic: 'Apache 2.0', it: true, rec: true },
+  { id: 'onnx-community/Llama-3.2-3B-Instruct-ONNX', name: 'Llama 3.2 3B', org: 'Meta', desc: 'Il più capace dei Llama piccoli.', size: [2296, null], lic: 'Llama 3.2', it: true },
+  { id: 'onnx-community/Phi-3.5-mini-instruct-onnx-web', name: 'Phi-3.5 mini', org: 'Microsoft', desc: '3,8 miliardi di parametri, forte nel ragionamento.', size: [2209, null], lic: 'MIT' },
+  { id: 'onnx-community/Qwen3-4B-ONNX', name: 'Qwen3 4B', org: 'Alibaba', desc: 'Il più grande del catalogo, multilingue.', size: [2700, null], lic: 'Apache 2.0', it: true },
+];
+const usingHF = () => (settings.model || '').startsWith('hf:');
+const hfId = () => settings.model.slice(3);
+const modelInfo = id => CATALOG.find(m => m.id === id) || (settings.hfModels || []).find(m => m.id === id)
+  || { id, name: id.split('/').pop(), org: id.split('/')[0], desc: 'Modello aggiunto dalla ricerca su Hugging Face.', custom: true };
+const modelLabel = () => usingHF() ? modelInfo(hfId()).name : 'Gemini Nano';
+const fmtMB = mb => mb >= 1024 ? (mb / 1024).toFixed(1).replace('.', ',') + ' GB' : Math.round(mb) + ' MB';
+const CACHE_NAME = 'transformers-cache';
+
+const HF = {
+  tf: null, loaded: null, loading: null, _gpu: undefined, _files: {},
+  async lib() {
+    if (!this.tf) { this.tf = await import(TF_URL); this.tf.env.allowLocalModels = false; }
+    return this.tf;
+  },
+  // WebGPU disponibile? e con supporto fp16 (necessario per i file q4f16)?
+  async gpu() {
+    if (this._gpu !== undefined) return this._gpu;
+    try { const a = navigator.gpu && await navigator.gpu.requestAdapter(); this._gpu = a ? { f16: a.features.has('shader-f16') } : null; }
+    catch { this._gpu = null; }
+    return this._gpu;
+  },
+  async files(id) {
+    if (this._files[id]) return this._files[id];
+    const r = await fetch(`https://huggingface.co/api/models/${id}/tree/main/onnx`);
+    if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'Il modello richiede un accesso approvato su Hugging Face.' : 'Il modello non ha file ONNX: non è compatibile con il browser.');
+    const list = (await r.json()).map(f => ({ name: f.path.split('/').pop(), size: (f.lfs?.size ?? f.size ?? 0) / 2 ** 20 }));
+    return (this._files[id] = list);
+  },
+  // sceglie dispositivo e quantizzazione in base ai file disponibili
+  async plan(id) {
+    const files = await this.files(id), gpu = await this.gpu();
+    const pick = dtypes => dtypes.map(dtype => {
+      const main = files.find(f => f.name === `model_${dtype}.onnx`);
+      if (!main) return null;
+      const data = files.filter(f => f.name.startsWith(`model_${dtype}.onnx_data`));
+      return { dtype, size: main.size + data.reduce((a, f) => a + f.size, 0), external: data.length || false };
+    }).filter(Boolean);
+    if (gpu) {
+      const c = pick(gpu.f16 ? ['q4f16', 'q4', 'int8', 'uint8', 'quantized'] : ['q4', 'int8', 'uint8', 'quantized'])[0];
+      if (c) return { ...c, device: 'webgpu' };
+    }
+    // su CPU si preferisce q4: la quantizzazione int8 peggiora molto la qualità dei modelli piccoli
+    const cpu = pick(['q4', 'int8', 'uint8', 'quantized']).filter(c => c.size < 2200)[0];
+    if (cpu) return { ...cpu, device: 'wasm' };
+    throw new Error(gpu ? 'Nessun file ONNX quantizzato compatibile.' : 'Questo modello richiede WebGPU (una scheda video compatibile).');
+  },
+  async cachedIds() {
+    const ids = new Set();
+    try {
+      const c = await caches.open(CACHE_NAME);
+      for (const r of await c.keys()) { const m = r.url.match(/^https:\/\/huggingface\.co\/(.+?)\/resolve\/[^/]+\/onnx\//); if (m) ids.add(decodeURIComponent(m[1])); }
+    } catch {}
+    return ids;
+  },
+  async state(id) {
+    if (this.loaded?.id === id) return 'available';
+    return (await this.cachedIds()).has(id) ? 'available' : 'downloadable';
+  },
+  async remove(id) {
+    if (this.loaded?.id === id) await this.unload();
+    const c = await caches.open(CACHE_NAME);
+    for (const r of await c.keys()) if (r.url.includes(`/${id}/resolve/`)) await c.delete(r);
+  },
+  async unload() { try { await this.loaded?.model?.dispose?.(); } catch {} this.loaded = null; },
+  async load(id, onProgress) {
+    if (this.loaded?.id === id) return this.loaded;
+    if (this.loading?.id === id) return this.loading.p;
+    const p = (async () => {
+      await this.unload();
+      const tf = await this.lib();
+      const plan = await this.plan(id);
+      navigator.storage?.persist?.().catch(() => {});
+      const files = {};
+      const progress = e => {
+        if (e.status === 'progress' && e.file) {
+          files[e.file] = { loaded: e.loaded || 0, total: e.total || 0 };
+          const v = Object.values(files);
+          const total = Math.max(v.reduce((a, f) => a + f.total, 0), plan.size * 2 ** 20);
+          onProgress?.(Math.min(0.99, v.reduce((a, f) => a + f.loaded, 0) / total));
+        }
+      };
+      const tokenizer = await tf.AutoTokenizer.from_pretrained(id, { progress_callback: progress });
+      const model = await tf.AutoModelForCausalLM.from_pretrained(id, {
+        dtype: plan.dtype, device: plan.device, progress_callback: progress,
+        ...(plan.external ? { use_external_data_format: plan.external } : {}),
+      });
+      onProgress?.(1);
+      const maxPos = model.config?.max_position_embeddings || 2048;
+      this.loaded = { id, tokenizer, model, ...plan, ctx: Math.min(maxPos, plan.device === 'webgpu' ? 8192 : 4096) };
+      return this.loaded;
+    })();
+    this.loading = { id, p };
+    try { return await p; } finally { this.loading = null; }
+  },
+};
+
+// rimuove il "ragionamento" dei modelli che lo producono (es. Qwen3): <think>…</think>
+const stripThink = s => s.replace(/<think>[\s\S]*?<\/think>\s*/g, '').replace(/<think>[\s\S]*$/, '');
+function extractJSON(s) {
+  s = s.replace(/```(?:json)?/gi, '');
+  const a = s.indexOf('{'), b = s.lastIndexOf('}');
+  return a >= 0 && b > a ? s.slice(a, b + 1) : s;
+}
+
+// sessione con la stessa interfaccia di LanguageModel (Prompt API), basata su Transformers.js
+class HFSession {
+  static async create(opts = {}) {
+    const target = new EventTarget();
+    opts.monitor?.(target);
+    const m = await HF.load(hfId(), p => { const e = new Event('downloadprogress'); e.loaded = p; e.total = 1; target.dispatchEvent(e); });
+    return new HFSession(m, (opts.initialPrompts || []).map(x => ({ role: x.role, content: String(x.content) })));
+  }
+  constructor(m, messages) { this.m = m; this.messages = messages; this.contextWindow = m.ctx; this.contextUsage = 0; this.measure(); }
+  count(msgs) {
+    try {
+      const r = this.m.tokenizer.apply_chat_template(msgs, { tokenize: true, return_tensor: false, return_dict: false, add_generation_prompt: true, enable_thinking: false });
+      const ids = r?.input_ids ?? r;
+      const n = Array.isArray(ids) ? (Array.isArray(ids[0]) ? ids[0].length : ids.length) : ids?.dims?.at(-1);
+      if (Number.isFinite(n)) return n;
+    } catch {}
+    return Math.round(msgs.reduce((a, x) => a + x.content.length, 0) / 3.5); // stima
+  }
+  measure() { this.contextUsage = this.count(this.messages); }
+  trim(reserve) { // scarta i messaggi più vecchi (non quello di sistema) se il contesto non basta
+    while (this.count(this.messages) + reserve > this.contextWindow) {
+      const i = this.messages.findIndex(x => x.role !== 'system');
+      if (i < 0 || i >= this.messages.length - 1) break;
+      this.messages.splice(i, 1);
+    }
+  }
+  destroy() {}
+  async prompt(input, options = {}) { let out = ''; await this._gen(input, options, t => (out += t)); return this._last; }
+  promptStreaming(input, options = {}) {
+    const self = this; let stopper = null;
+    return new ReadableStream({
+      async start(ctrl) {
+        try { await self._gen(input, options, t => ctrl.enqueue(t), s => (stopper = s)); ctrl.close(); }
+        catch (e) { ctrl.error(e); }
+      },
+      cancel() { stopper?.interrupt(); },
+    });
+  }
+  async _gen(input, options, onText, setStopper) {
+    if (typeof input !== 'string') {
+      const parts = input.flatMap(x => Array.isArray(x.content) ? x.content : [{ type: 'text', value: x.content }]);
+      if (parts.some(x => x.type !== 'text')) throw new DOMException(`${modelLabel()} non supporta le immagini: per le immagini usa Gemini Nano.`, 'NotSupportedError');
+      input = parts.map(x => x.value).join('\n');
+    }
+    let text = input;
+    if (options.responseConstraint) text += `\n\nRispondi SOLO con un oggetto JSON valido, senza testo prima o dopo e senza blocchi di codice, che rispetti questo JSON Schema:\n${JSON.stringify(options.responseConstraint)}`;
+    const tf = await HF.lib(), { tokenizer, model } = this.m;
+    const maxNew = options.responseConstraint ? 1500 : 1024;
+    this.messages.push({ role: 'user', content: text });
+    this.trim(maxNew);
+    const inputs = tokenizer.apply_chat_template(this.messages, { add_generation_prompt: true, return_dict: true, enable_thinking: false });
+    const stopper = new tf.InterruptableStoppingCriteria();
+    setStopper?.(stopper);
+    const signal = options.signal, onAbort = () => stopper.interrupt();
+    signal?.addEventListener('abort', onAbort);
+    let full = '', shown = '';
+    const streamer = new tf.TextStreamer(tokenizer, {
+      skip_prompt: true, skip_special_tokens: true,
+      callback_function: t => { full += t; const vis = stripThink(full); if (vis.length > shown.length && vis.startsWith(shown)) { onText(vis.slice(shown.length)); shown = vis; } },
+    });
+    const temp = settings.temp !== '' ? +settings.temp : (options.responseConstraint ? 0.2 : 0.6);
+    try {
+      await model.generate({
+        ...inputs, max_new_tokens: maxNew, streamer, stopping_criteria: stopper,
+        do_sample: temp > 0, ...(temp > 0 ? { temperature: temp, top_k: settings.topK !== '' ? +settings.topK : 40 } : {}),
+        repetition_penalty: 1.1,
+      });
+    } finally { signal?.removeEventListener('abort', onAbort); }
+    if (signal?.aborted) { this.messages.pop(); throw new DOMException('Interrotto', 'AbortError'); }
+    let answer = stripThink(full).trim();
+    if (options.responseConstraint) answer = extractJSON(answer);
+    this._last = answer;
+    this.messages.push({ role: 'assistant', content: answer });
+    this.measure();
+  }
+}
+const getLM = () => usingHF() ? HFSession : need('LanguageModel');
+
+// con un modello Hugging Face, Riassumi/Traduci/Scrivi/Riscrivi diventano richieste al modello
+const HF_PROMPTS = {
+  summarize: (t, o) => {
+    const n = { short: 0, medium: 1, long: 2 }[o.length];
+    const plain = o.format === 'plain-text';
+    const what = {
+      'key-points': `Elenca i ${[3, 5, 7][n]} punti chiave del testo qui sotto. Scrivi ogni punto su una riga che inizia con ${plain ? '«- »' : '«- » e una frase completa'}.`,
+      tldr: `Riassumi il testo qui sotto in ${['una sola frase', 'tre frasi', 'cinque frasi'][n]}.`,
+      teaser: `Scrivi ${['una frase', 'tre frasi', 'cinque frasi'][n]} che presentino il testo qui sotto e invoglino a leggerlo.`,
+      headline: `Scrivi un titolo di al massimo ${[12, 17, 22][n]} parole per il testo qui sotto.`,
+    }[o.type];
+    return `${what} Usa la stessa lingua del testo e rispondi solo con il risultato.\n\nTESTO:\n${t}`;
+  },
+  translate: (t, o) => `Traduci in ${LANGS[o.targetLanguage] || o.targetLanguage} il testo qui sotto. Rispondi solo con la traduzione, senza commenti.\n\nTESTO:\n${t}`,
+  write: (t, o) => `Scrivi il testo richiesto qui sotto ${{ formal: 'con tono formale', neutral: 'con tono neutro', casual: 'con tono informale' }[o.tone]}. Lunghezza: ${{ short: 'breve (circa 80 parole)', medium: 'media (circa 200 parole)', long: 'lunga (circa 400 parole)' }[o.length]}.${o.format === 'plain-text' ? ' Non usare markdown.' : ''} Rispondi solo con il testo.\n\nRICHIESTA:\n${t}`,
+  rewrite: (t, o) => `Riscrivi il testo qui sotto${{ 'as-is': '', 'more-formal': ' con un tono più formale', 'more-casual': ' con un tono più informale' }[o.tone]}${{ 'as-is': '', shorter: ' e rendilo più breve', longer: ' e rendilo più lungo e dettagliato' }[o.length]}.${o.format === 'plain-text' ? ' Non usare markdown.' : ''} Mantieni la stessa lingua e lo stesso significato. Rispondi solo con il testo riscritto.\n\nTESTO:\n${t}`,
+};
+async function hfTask(t, text, opts, ans, signal, onProgress, streamInto) {
+  if (!text) throw new Error('Scrivi o incolla prima un testo.');
+  if (t === 'translate' && g.LanguageDetector) {
+    try { const src = (await detectLang(text, onProgress))[0]?.detectedLanguage; if (src && src !== 'und') ans.note = `${LANGS[src] || src} → ${LANGS[opts.targetLanguage] || opts.targetLanguage}`; } catch {}
+  }
+  const s = await HFSession.create({ initialPrompts: [{ role: 'system', content: 'Svolgi con precisione il compito richiesto. Rispondi direttamente, senza introduzioni né commenti.' }], monitor: monitorInto(onProgress) });
+  await streamInto(s.promptStreaming(HF_PROMPTS[t](text, opts), { signal }));
+}
+
+/* ================= gestione modelli (interfaccia) ================= */
+let nanoState = null;
+const downloads = {}; // id -> avanzamento 0..1 dei download in corso
+function setModel(m) {
+  if (busy) busy.abort();
+  settings.model = m; saveSettings();
+  resetSession(); cache.clear();
+  setTool(tool, false); updateDisclaimer(); refreshStatus();
+  if ($('models').open) renderModels();
+}
+function updateDisclaimer() {
+  $('disclaimer').textContent = usingHF() ? `${modelLabel()} gira in questo browser: i testi non lasciano il computer.`
+    : REMOTE ? `Gemini Nano gira su ${REMOTE.host}.` : 'Gemini Nano gira sul tuo dispositivo: nessun dato lascia il computer.';
+}
+async function downloadModel(id) {
+  if (downloads[id] != null) return;
+  // controlla lo spazio che il browser può usare prima di scaricare
+  try {
+    const [plan, est] = await Promise.all([HF.plan(id), navigator.storage.estimate()]);
+    const freeMB = (est.quota - est.usage) / 2 ** 20;
+    if (!(await HF.cachedIds()).has(id) && plan.size > freeMB * 0.95) {
+      toast(`Spazio insufficiente: ${modelInfo(id).name} richiede ${fmtMB(plan.size)}, il browser ne ha ${fmtMB(freeMB)} disponibili. Libera spazio sul disco o scegli un modello più piccolo.`, 9000);
+      return;
+    }
+  } catch (e) { toast(`${modelInfo(id).name}: ${e.message || e}`, 8000); return; }
+  downloads[id] = 0; renderModels();
+  try {
+    if (!usingHF() || hfId() !== id) setModel('hf:' + id);
+    await HF.load(id, p => {
+      downloads[id] = p;
+      const bar = document.querySelector(`[data-mid="${CSS.escape(id)}"] .progress i`);
+      const txt = document.querySelector(`[data-mid="${CSS.escape(id)}"] .dl-txt`);
+      if (bar) bar.style.width = `${p * 100}%`;
+      if (txt) txt.textContent = p < 1 ? `Download ${Math.round(p * 100)}%` : 'Caricamento in memoria…';
+    });
+    toast(`${modelInfo(id).name} è pronto.`);
+  } catch (e) {
+    toast(`${modelInfo(id).name}: ${e.message || e}`, 8000);
+    if (usingHF() && hfId() === id && !(await HF.cachedIds()).has(id)) setModel('nano');
+  } finally {
+    delete downloads[id];
+    refreshStatus(); if ($('models').open) renderModels();
+  }
+}
+async function openModels() { $('models').showModal(); renderModels(); }
+$('modelBtn').onclick = openModels;
+$('closeModels').onclick = () => $('models').close();
+$('models').addEventListener('click', e => { if (e.target === $('models')) $('models').close(); });
+
+async function renderModels() {
+  const body = $('modelsBody');
+  const [gpu, cached] = await Promise.all([HF.gpu(), HF.cachedIds()]);
+  let storage = '';
+  try { const e = await navigator.storage.estimate(); storage = `Spazio usato dal browser: ${fmtMB(e.usage / 2 ** 20)} su ${fmtMB(e.quota / 2 ** 20)} disponibili.`; } catch {}
+  body.innerHTML = '';
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+  const section = t => body.append(el('div', 'section-title', t));
+  const btn = (label, fn, primary) => { const b = el('button', 'btn small' + (primary ? ' primary' : ''), label); b.onclick = fn; return b; };
+
+  // Gemini Nano
+  section('Integrato in Chrome');
+  const nano = el('div', 'mcard' + (!usingHF() ? ' sel' : ''));
+  const nt = el('div', 'mcard-top'); nt.append(el('span', 'mcard-name', 'Gemini Nano'), el('span', 'mcard-org', 'Google · scaricato da Chrome'));
+  const ns = nanoState || 'missing';
+  nt.append(el('span', 'tag ' + (ns === 'available' ? 'ok' : 'warn'), stateLabel(ns)));
+  nano.append(nt, el('div', 'mcard-desc', 'Il modello predefinito: supporta tutte le funzioni, comprese immagini e correzione. ' + (ns === 'missing' || ns === 'unavailable' ? 'Non disponibile in questo browser o su questo dispositivo.' : '')));
+  const na = el('div', 'mcard-actions');
+  if (!usingHF()) na.append(el('span', 'tag acc', 'In uso'));
+  else if (ns !== 'missing' && ns !== 'unavailable') na.append(btn('Usa', () => setModel('nano'), true));
+  nano.append(na); body.append(nano);
+
+  // Hugging Face
+  section('Hugging Face · scaricati ed eseguiti nel browser');
+  body.append(el('p', 'hint', (gpu ? 'Accelerazione WebGPU disponibile: i modelli usano la scheda video.' : 'WebGPU non disponibile: i modelli girano sulla CPU (più lenti) e i più grandi non sono utilizzabili.')
+    + (REMOTE ? ' I modelli Hugging Face girano in questo browser, non sul server.' : '') + ' ' + storage));
+  const list = [...CATALOG, ...(settings.hfModels || []).filter(m => !CATALOG.some(c => c.id === m.id))];
+  for (const m of list) {
+    const sel = usingHF() && hfId() === m.id, isCached = cached.has(m.id), dl = downloads[m.id];
+    const sizeMB = gpu ? m.size?.[0] : m.size?.[1];
+    const card = el('div', 'mcard' + (sel ? ' sel' : '')); card.dataset.mid = m.id;
+    const top = el('div', 'mcard-top');
+    top.append(el('span', 'mcard-name', m.name), el('span', 'mcard-org', m.org));
+    if (m.rec) top.append(el('span', 'tag acc', 'consigliato'));
+    if (m.it) top.append(el('span', 'tag', 'italiano'));
+    if (sizeMB) top.append(el('span', 'tag', fmtMB(sizeMB)));
+    if (m.size && m.size[1] == null) top.append(el('span', 'tag warn', 'richiede WebGPU'));
+    if (m.lic) top.append(el('span', 'tag', 'licenza ' + m.lic));
+    if (isCached) top.append(el('span', 'tag ok', 'scaricato'));
+    card.append(top, el('div', 'mcard-desc', m.desc));
+    if (dl != null) {
+      const pr = el('div', 'progress'); const i = el('i'); i.style.width = `${dl * 100}%`; pr.append(i);
+      card.append(pr, el('div', 'hint dl-txt', dl < 1 ? `Download ${Math.round(dl * 100)}%` : 'Caricamento in memoria…'));
+    }
+    const act = el('div', 'mcard-actions');
+    const blocked = !gpu && m.size && m.size[1] == null;
+    if (dl == null) {
+      if (sel) act.append(el('span', 'tag acc', HF.loaded?.id === m.id ? 'In uso · caricato' : 'In uso'));
+      if (!sel && isCached) act.append(btn('Usa', () => setModel('hf:' + m.id), true));
+      if (!isCached && !blocked) act.append(btn(sel ? 'Scarica' : 'Scarica e usa', () => downloadModel(m.id), true));
+      if (isCached) act.append(btn('Elimina', async () => {
+        if (!confirm(`Eliminare ${m.name} dal browser? Potrai riscaricarlo in seguito.`)) return;
+        await HF.remove(m.id); if (sel) setModel('nano'); else renderModels(); refreshStatus();
+      }));
+      if (m.custom || !CATALOG.some(c => c.id === m.id)) act.append(btn('Togli dall\'elenco', () => {
+        settings.hfModels = (settings.hfModels || []).filter(x => x.id !== m.id); saveSettings(); if (sel) setModel('nano'); else renderModels();
+      }));
+    }
+    const a = el('a', null, 'Pagina del modello ↗'); a.href = `https://huggingface.co/${m.id}`; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    act.append(a); card.append(act); body.append(card);
+  }
+
+  // ricerca
+  section('Cerca altri modelli su Hugging Face');
+  const row = el('div', 'search-row');
+  const inp = el('input'); inp.placeholder = 'Es. qwen, llama, gemma, phi…'; inp.value = HF.lastQuery || '';
+  const go = btn('Cerca', () => searchHF(inp.value), true);
+  inp.onkeydown = e => { if (e.key === 'Enter') searchHF(inp.value); };
+  row.append(inp, go); body.append(row);
+  body.append(el('p', 'hint', 'Sono compatibili i modelli di generazione di testo con file ONNX (molti sono pubblicati da «onnx-community»). Prima di aggiungerlo, AulaNano verifica che il modello funzioni nel browser.'));
+  const res = el('div'); res.id = 'hfResults'; body.append(res);
+  if (HF.lastResults) renderResults(HF.lastResults);
+}
+async function searchHF(q) {
+  HF.lastQuery = q = q.trim();
+  const box = $('hfResults'); box.textContent = 'Ricerca…';
+  try {
+    const r = await fetch(`https://huggingface.co/api/models?filter=onnx&pipeline_tag=text-generation&sort=downloads&direction=-1&limit=20${q ? '&search=' + encodeURIComponent(q) : ''}`);
+    HF.lastResults = (await r.json()).filter(m => !m.gated && !/tiny-random|[-_/]test/i.test(m.id)); // esclude i modelli di prova
+    renderResults(HF.lastResults);
+  } catch (e) { box.textContent = 'Ricerca non riuscita: ' + e.message; }
+}
+function renderResults(list) {
+  const box = $('hfResults'); box.innerHTML = '';
+  if (!list.length) { box.textContent = 'Nessun modello trovato.'; return; }
+  for (const m of list) {
+    const row = document.createElement('div'); row.className = 'hf-res';
+    const id = document.createElement('span'); id.className = 'id'; id.textContent = m.id;
+    const dl = document.createElement('span'); dl.className = 'tag'; dl.textContent = `${(m.downloads || 0).toLocaleString('it-IT')} download`;
+    const b = document.createElement('button'); b.className = 'btn small';
+    const known = CATALOG.some(c => c.id === m.id) || (settings.hfModels || []).some(c => c.id === m.id);
+    b.textContent = known ? 'Già in elenco' : 'Aggiungi'; b.disabled = known;
+    b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Verifica…';
+      try {
+        const gpu = await HF.gpu(); const plan = await HF.plan(m.id);
+        settings.hfModels = [...(settings.hfModels || []), { id: m.id, name: m.id.split('/').pop(), org: m.id.split('/')[0], desc: 'Aggiunto dalla ricerca su Hugging Face.', size: gpu ? [plan.size, null] : [null, plan.size], custom: true }];
+        saveSettings(); toast(`${m.id} aggiunto (${fmtMB(plan.size)}).`); renderModels();
+      } catch (e) { b.textContent = 'Non compatibile'; b.title = e.message; toast(`${m.id}: ${e.message}`, 6000); }
+    };
+    row.append(id, dl, b); box.append(row);
+  }
+}
+
 /* ================= sessioni e modelli ================= */
 let chat = { convId: null, session: null, images: false };
 const cache = new Map(); // istanze riutilizzabili di Summarizer/Translator/...
@@ -1122,8 +1528,8 @@ async function chatOptions(withImages, onProgress) {
   const opts = { monitor: monitorInto(onProgress), expectedInputs: [{ type: 'text' }] };
   if (withImages) opts.expectedInputs.push({ type: 'image' });
   if (settings.lang) opts.expectedOutputs = [{ type: 'text', languages: [settings.lang] }];
-  if (settings.temp !== '' || settings.topK !== '') {
-    const p = await LanguageModel.params?.();
+  if (!usingHF() && (settings.temp !== '' || settings.topK !== '')) {
+    const p = await g.LanguageModel?.params?.();
     if (p) {
       opts.temperature = settings.temp !== '' ? +settings.temp : p.defaultTemperature;
       opts.topK = settings.topK !== '' ? +settings.topK : p.defaultTopK;
@@ -1139,7 +1545,7 @@ function chatSystem() {
 async function getChatSession(c, history, withImages, onProgress) {
   if (chat.session && chat.convId === c.id && (!withImages || chat.images)) return chat.session;
   resetSession();
-  const LM = need('LanguageModel');
+  const LM = getLM();
   const base = await chatOptions(withImages, onProgress);
   const sys = chatSystem();
   // ricostruisce la memoria dalla cronologia (solo testo); se non entra nel contesto, scarta i messaggi più vecchi
@@ -1223,7 +1629,8 @@ async function respond(c) {
   const streamInto = async iter => { for await (const chunk of iter) { ans.text += chunk; paint(); } };
   try {
     const opts = toolOpts(t);
-    if (T.school) await runSchool(t, user.text, opts, ans, signal, onProgress, paint, streamInto);
+    if (usingHF() && HF_PROMPTS[t]) await hfTask(t, user.text, opts, ans, signal, onProgress, streamInto);
+    else if (T.school) await runSchool(t, user.text, opts, ans, signal, onProgress, paint, streamInto);
     else switch (t) {
       case 'chat': {
         const images = (user.images || []).filter(Boolean);
@@ -1304,7 +1711,7 @@ async function respond(c) {
 }
 
 async function runSchool(t, text, opts, ans, signal, onProgress, paint, streamInto) {
-  const T = TOOLS[t], LM = need('LanguageModel');
+  const T = TOOLS[t], LM = getLM();
   if (!text) throw new Error('Incolla prima un testo.');
   const newSession = () => LM.create({ initialPrompts: [{ role: 'system', content: schoolSystem() }], monitor: monitorInto(onProgress) });
   if (T.json) {
@@ -1315,6 +1722,9 @@ async function runSchool(t, text, opts, ans, signal, onProgress, paint, streamIn
       try {
         const raw = await s.prompt(T.prompt(text, opts), { signal, responseConstraint: T.json });
         ans.data = JSON.parse(raw);
+      } catch (e) {
+        if (!(e instanceof SyntaxError) || attempt === 2) throw e; // JSON non valido: riprova
+        continue;
       } finally { s.destroy(); }
       if (!T.check || T.check(ans.data)) break;
     }
@@ -1365,9 +1775,14 @@ async function apiAvailability(api) {
 async function refreshStatus() {
   const apis = [...new Set(Object.values(TOOLS).map(t => t.api))];
   await Promise.all(apis.map(async a => { apiState[a] = await apiAvailability(a); }));
+  nanoState = apiState.LanguageModel;
+  if (usingHF()) {
+    const st = downloads[hfId()] != null ? 'downloading' : await HF.state(hfId());
+    for (const a of ['LanguageModel', 'Summarizer', 'Writer', 'Rewriter', 'Translator']) apiState[a] = st;
+  }
   const lm = apiState.LanguageModel;
-  $('statusDot').className = 'dot ' + lm;
-  $('statusTxt').textContent = `Gemini Nano: ${stateLabel(lm)}`;
+  $('statusDot').className = 'dot ' + lm; $('modelDot').className = 'dot ' + lm;
+  $('statusTxt').textContent = `${modelLabel()}: ${stateLabel(lm)}`; $('modelName').textContent = modelLabel();
   renderApiRows();
   return lm;
 }
@@ -1380,7 +1795,8 @@ function renderApiRows() {
     const st = apiState[t.api] || '…';
     const row = document.createElement('div'); row.className = 'api-row';
     row.innerHTML = `<span class="dot ${st}"></span><span class="name"></span><span class="st"></span>`;
-    row.querySelector('.name').textContent = t.api === 'LanguageModel' ? 'Gemini Nano (Chat e funzioni Scuola)' : t.label;
+    row.querySelector('.name').textContent = t.api === 'LanguageModel' ? `${modelLabel()} (Chat e funzioni Scuola)` : t.label;
+    if (usingHF() && ['LanguageModel', 'Summarizer', 'Writer', 'Rewriter', 'Translator'].includes(t.api)) { row.querySelector('.st').textContent = stateLabel(st); box.append(row); continue; }
     row.querySelector('.st').textContent = stateLabel(st);
     if (st === 'downloadable' || st === 'downloading') {
       const b = document.createElement('button'); b.className = 'btn small'; b.textContent = 'Scarica';
@@ -1462,11 +1878,17 @@ async function firstRun() {
   const st = await refreshStatus();
   if (st === 'available') { $('setup').hidden = true; if (!store.get('gn-privacy-ok', false)) showPrivacy(); return; }
   const skip = ['Continua senza Gemini Nano', hideSetup];
+  const useHF = ['Usa un modello Hugging Face', () => { hideSetup(); openModels(); }, true];
+  if (usingHF()) {
+    const m = modelInfo(hfId());
+    return showSetup(`${m.name} non è ancora scaricato`, `Il modello scelto va scaricato una volta da Hugging Face. Dopo funziona anche offline, nel browser.`,
+      [['Apri la gestione modelli', () => { hideSetup(); openModels(); }, true], ['Torna a Gemini Nano', () => { setModel('nano'); hideSetup(); }]]);
+  }
   if (st === 'missing') {
-    return showSetup('Gemini Nano non è attivo', 'Questo Chrome non espone le API AI integrate. Serve Google Chrome desktop recente con i flag attivi' + (APP ? ': l\'app li imposta da sola, prova a riavviarla.' : ' (vedi chrome://flags).'), [skip]);
+    return showSetup('Gemini Nano non è attivo', 'Questo Chrome non espone le API AI integrate. Serve Google Chrome desktop recente con i flag attivi' + (APP ? ': l\'app li imposta da sola, prova a riavviarla.' : ' (vedi chrome://flags).') + '\nIn alternativa puoi usare un modello open source di Hugging Face, che gira direttamente nel browser.', [useHF, skip]);
   }
   if (st === 'unavailable') {
-    const btns = [skip];
+    const btns = [useHF, skip];
     if (APP && !APP.forceCpu) btns.unshift(['Prova la modalità CPU', () => switchMode(true), true]);
     const lowDisk = APP && APP.freeGB < APP.minFreeGB;
     return showSetup('Dispositivo non supportato', lowDisk
@@ -1516,7 +1938,7 @@ $('about').addEventListener('close', () => store.set('gn-privacy-ok', true));
 
 /* ================= avvio ================= */
 applyTheme(); applyRead(); renderLevel();
-if (REMOTE) $('disclaimer').textContent = `Gemini Nano gira su ${REMOTE.host}.`;
+updateDisclaimer();
 setTool(tool, false);
 renderConvList(); renderThread(); updateSend();
 $('input').focus();
