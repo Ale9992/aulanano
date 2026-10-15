@@ -1,0 +1,10 @@
+{
+  "main": "app.cjs",
+  "output": "build/sea-prep.blob",
+  "disableExperimentalSEAWarning": true,
+  "useCodeCache": false,
+  "assets": {
+    "index.html": "../web/index.html",
+    "studio.html": "../web/studio.html"
+  }
+}

@@ -1,0 +1,15 @@
+# configurazione locale (percorsi, nomi host, chiavi)
+.env
+server/.env
+.claude/
+
+# dati: Chrome estratto, profilo, modello, log
+data/
+
+# build dell'app desktop
+desktop/build/
+
+# sistema
+.DS_Store
+Thumbs.db
+node_modules/

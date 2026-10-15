@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AulaNano · Diagnostica</title>
+<style>
+:root{
+  --bg:#f6f7fb; --panel:#ffffff; --ink:#1b1e28; --muted:#646b7e; --line:#e2e5ee;
+  --accent:#3b6cf6; --accent-ink:#fff; --ok:#1f9d55; --warn:#c27c0e; --err:#d0393e;
+  --code:#f0f2f8; --user:#e8eeff; --bot:#f3f4f8;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11131a; --panel:#1a1d27; --ink:#e7e9f0; --muted:#9aa1b4; --line:#2c3040;
+    --accent:#6d93ff; --accent-ink:#0d1020; --code:#232737; --user:#24305a; --bot:#222634;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11131a; --panel:#1a1d27; --ink:#e7e9f0; --muted:#9aa1b4; --line:#2c3040;
+  --accent:#6d93ff; --accent-ink:#0d1020; --code:#232737; --user:#24305a; --bot:#222634;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:20px 16px 0;max-width:1100px;margin:0 auto}
+h1{margin:0;font-size:22px}
+header p{margin:4px 0 0;color:var(--muted)}
+nav{display:flex;gap:4px;flex-wrap:wrap;max-width:1100px;margin:16px auto 0;padding:0 16px}
+nav button{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 14px;border-radius:8px;cursor:pointer;font:inherit}
+nav button.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+main{max-width:1100px;margin:12px auto 40px;padding:0 16px}
+section{display:none}
+section.active{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:12px}
+.card h2{margin:0 0 10px;font-size:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}
+textarea{width:100%;min-height:110px;resize:vertical}
+button.primary,button.sec{font:inherit;border-radius:8px;padding:8px 14px;cursor:pointer;border:1px solid var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-ink)}
+button.sec{background:transparent;color:var(--accent)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.out{white-space:pre-wrap;background:var(--code);border-radius:8px;padding:12px;min-height:60px;margin-top:10px;overflow-wrap:anywhere}
+.api{border:1px solid var(--line);border-radius:10px;padding:10px}
+.api b{display:block}
+.badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;margin-top:4px;border:1px solid currentColor}
+.available{color:var(--ok)} .downloadable,.downloading{color:var(--warn)} .unavailable,.missing{color:var(--err)}
+.muted{color:var(--muted);font-size:13px}
+progress{width:100%;height:8px}
+#chatLog{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto;padding:4px}
+.msg{padding:10px 12px;border-radius:10px;white-space:pre-wrap;max-width:85%;overflow-wrap:anywhere}
+.msg.user{background:var(--user);align-self:flex-end}
+.msg.assistant{background:var(--bot);align-self:flex-start}
+.msg.system{color:var(--muted);font-size:13px;align-self:center}
+.msg img{max-width:200px;border-radius:6px;display:block;margin-top:6px}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:13px}
+ol li,ul li{margin-bottom:4px}
+mark{background:#ffd76a55;color:inherit;border-bottom:2px solid var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <h1>AulaNano · Diagnostica</h1>
+  <p>Strumenti di prova e diagnostica per le API AI integrate di Chrome (Gemini Nano). Progetto non affiliato a Google.</p>
+</header>
+
+<nav id="tabs">
+  <button data-tab="stato" class="active">Stato e setup</button>
+  <button data-tab="chat">Chat (Prompt API)</button>
+  <button data-tab="sum">Riassunto</button>
+  <button data-tab="tr">Traduzione</button>
+  <button data-tab="write">Scrittura / Riscrittura</button>
+  <button data-tab="proof">Correzione</button>
+</nav>
+
+<main>
+<!-- ================= STATO ================= -->
+<section id="stato" class="active">
+  <div class="card">
+    <h2>Disponibilità delle API</h2>
+    <div class="grid" id="apiGrid"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="sec" id="refresh">Ricontrolla</button>
+      <span class="muted" id="ctxInfo"></span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Download del modello</h2>
+    <p class="muted">Se lo stato è «downloadable», il primo <code>create()</code> scarica Gemini Nano (alcuni GB). Serve un clic dell'utente.</p>
+    <button class="primary" id="dlBtn">Scarica / prepara Gemini Nano</button>
+    <progress id="dlProg" value="0" max="1" style="margin-top:10px"></progress>
+    <div class="muted" id="dlTxt"></div>
+  </div>
+  <div class="card">
+    <h2>Diagnostica</h2>
+    <p class="muted">Prova a creare ogni funzione con opzioni minime e con varianti (lingue, immagini) per capire quale configurazione manca. Copia il risultato se chiedi aiuto.</p>
+    <button class="primary" id="diagBtn">Esegui diagnostica</button>
+    <div class="out" id="diagOut"></div>
+  </div>
+  <div class="card">
+    <h2>Requisiti e attivazione</h2>
+    <ol>
+      <li>Chrome desktop recente (Windows 10/11, macOS 13+, Linux o ChromeOS Chromebook Plus). Non funziona su mobile.</li>
+      <li>Almeno 22 GB liberi sul disco del profilo Chrome; GPU con più di 4 GB di VRAM oppure CPU con 16 GB di RAM e 4+ core; rete non a consumo per il download.</li>
+      <li>Se un'API risulta assente, attiva in <code>chrome://flags</code>:
+        <ul>
+          <li><code>#optimization-guide-on-device-model</code> → Enabled BypassPerfRequirement</li>
+          <li><code>#prompt-api-for-gemini-nano</code> (e <code>…-multimodal-input</code> per le immagini)</li>
+          <li><code>#writer-api-for-gemini-nano</code>, <code>#rewriter-api-for-gemini-nano</code>, <code>#proofreader-api-for-gemini-nano</code></li>
+        </ul>
+        poi riavvia Chrome.</li>
+      <li>Stato del modello e log: <code>chrome://on-device-internals</code>.</li>
+      <li>Apri questa pagina da <code>http://localhost</code> (contesto sicuro), non da un iframe esterno.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ================= CHAT ================= -->
+<section id="chat">
+  <div class="card">
+    <h2>Impostazioni sessione</h2>
+    <label>Prompt di sistema
+      <textarea id="sysPrompt" style="min-height:60px">Sei un assistente utile e conciso. Rispondi in italiano.</textarea>
+    </label>
+    <div class="row" style="margin-top:10px">
+      <label>Temperatura <input type="number" id="temp" step="0.1" min="0" max="2" placeholder="default" style="width:110px"></label>
+      <label>Top-K <input type="number" id="topk" step="1" min="1" max="128" placeholder="default" style="width:110px"></label>
+      <label>Lingua output
+        <select id="outLang"><option value="">auto</option><option>en</option><option>es</option><option>ja</option><option>it</option><option>fr</option><option>de</option></select>
+      </label>
+      <label><span><input type="checkbox" id="useImg"> abilita immagini</span></label>
+      <button class="primary" id="newSession">Nuova sessione</button>
+    </div>
+    <p class="muted" id="sessInfo">Nessuna sessione.</p>
+  </div>
+  <div class="card">
+    <div id="chatLog"></div>
+    <label style="margin-top:10px">Messaggio
+      <textarea id="chatIn" style="min-height:70px" placeholder="Scrivi e premi Ctrl/⌘+Invio"></textarea>
+    </label>
+    <details style="margin-top:8px"><summary class="muted">Output strutturato (JSON Schema, opzionale)</summary>
+      <textarea id="schema" style="min-height:80px" placeholder='{"type":"object","properties":{"sentiment":{"enum":["positivo","negativo","neutro"]}}}'></textarea>
+    </details>
+    <div class="row" style="margin-top:8px">
+      <input type="file" id="imgIn" accept="image/*" style="display:none">
+      <button class="sec" id="imgBtn" disabled>Allega immagine</button>
+      <span class="muted" id="imgName"></span>
+      <span style="flex:1"></span>
+      <button class="sec" id="stopBtn" disabled>Stop</button>
+      <button class="primary" id="sendBtn">Invia</button>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SUMMARIZER ================= -->
+<section id="sum">
+  <div class="card">
+    <h2>Summarizer API</h2>
+    <div class="row">
+      <label>Tipo <select id="sumType"><option>key-points</option><option>tldr</option><option>teaser</option><option>headline</option></select></label>
+      <label>Lunghezza <select id="sumLen"><option>short</option><option selected>medium</option><option>long</option></select></label>
+      <label>Formato <select id="sumFmt"><option>markdown</option><option>plain-text</option></select></label>
+      <label>Lingua output <select id="sumLang"><option>en</option><option>es</option><option>ja</option><option>it</option></select></label>
+    </div>
+    <label style="margin-top:10px">Contesto condiviso (opzionale) <input id="sumCtx" placeholder="Es. articolo tecnico per sviluppatori"></label>
+    <label style="margin-top:10px">Testo da riassumere <textarea id="sumIn" style="min-height:180px"></textarea></label>
+    <div class="row" style="margin-top:8px"><button class="primary" id="sumBtn">Riassumi</button></div>
+    <div class="out" id="sumOut"></div>
+  </div>
+</section>
+
+<!-- ================= TRANSLATOR ================= -->
+<section id="tr">
+  <div class="card">
+    <h2>Translator + Language Detector</h2>
+    <div class="row">
+      <label>Da <select id="trFrom"><option value="auto">rileva automaticamente</option></select></label>
+      <label>A <select id="trTo"></select></label>
+      <button class="primary" id="trBtn">Traduci</button>
+      <button class="sec" id="detBtn">Solo rileva lingua</button>
+    </div>
+    <label style="margin-top:10px">Testo <textarea id="trIn"></textarea></label>
+    <div class="out" id="trOut"></div>
+  </div>
+</section>
+
+<!-- ================= WRITER / REWRITER ================= -->
+<section id="write">
+  <div class="card">
+    <h2>Writer API</h2>
+    <div class="row">
+      <label>Tono <select id="wTone"><option>formal</option><option selected>neutral</option><option>casual</option></select></label>
+      <label>Lunghezza <select id="wLen"><option>short</option><option selected>medium</option><option>long</option></select></label>
+      <label>Formato <select id="wFmt"><option>plain-text</option><option>markdown</option></select></label>
+    </div>
+    <label style="margin-top:10px">Cosa scrivere <textarea id="wIn" style="min-height:70px" placeholder="Es. un'email per chiedere un giorno di ferie venerdì prossimo"></textarea></label>
+    <label style="margin-top:10px">Contesto (opzionale) <input id="wCtx"></label>
+    <div class="row" style="margin-top:8px"><button class="primary" id="wBtn">Scrivi</button></div>
+    <div class="out" id="wOut"></div>
+  </div>
+  <div class="card">
+    <h2>Rewriter API</h2>
+    <div class="row">
+      <label>Tono <select id="rwTone"><option>as-is</option><option>more-formal</option><option>more-casual</option></select></label>
+      <label>Lunghezza <select id="rwLen"><option>as-is</option><option>shorter</option><option>longer</option></select></label>
+      <label>Formato <select id="rwFmt"><option>as-is</option><option>plain-text</option><option>markdown</option></select></label>
+    </div>
+    <label style="margin-top:10px">Testo da riscrivere <textarea id="rwIn"></textarea></label>
+    <label style="margin-top:10px">Istruzioni / contesto (opzionale) <input id="rwCtx"></label>
+    <div class="row" style="margin-top:8px"><button class="primary" id="rwBtn">Riscrivi</button></div>
+    <div class="out" id="rwOut"></div>
+  </div>
+</section>
+
+<!-- ================= PROOFREADER ================= -->
+<section id="proof">
+  <div class="card">
+    <h2>Proofreader API</h2>
+    <label>Testo <textarea id="pfIn" placeholder="I has a apple and they is red."></textarea></label>
+    <div class="row" style="margin-top:8px"><button class="primary" id="pfBtn">Correggi</button></div>
+    <h2 style="margin-top:14px">Errori evidenziati</h2>
+    <div class="out" id="pfMarked"></div>
+    <h2 style="margin-top:14px">Testo corretto</h2>
+    <div class="out" id="pfOut"></div>
+  </div>
+</section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const g = globalThis;
+
+/* ---------- tabs ---------- */
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('active', s.id === b.dataset.tab));
+});
+
+/* ---------- helpers ---------- */
+function monitor(el) {
+  return m => m.addEventListener('downloadprogress', e => {
+    const p = e.total ? e.loaded / e.total : e.loaded;
+    if (el) el.textContent = `Download modello: ${(p * 100).toFixed(1)}%`;
+    $('dlProg').value = p;
+    $('dlTxt').textContent = `Download: ${(p * 100).toFixed(1)}%`;
+  });
+}
+function errMsg(e) {
+  let m = `⚠️ ${e.name || 'Errore'}: ${e.message || e}`;
+  if (/execution config/i.test(e.message || ''))
+    m += '\n→ Il modello è scaricato ma manca la configurazione per questa funzione: abilita il flag della funzione in chrome://flags, aggiorna «Optimization Guide On Device Model» in chrome://components e riavvia Chrome. Verifica in chrome://on-device-internals.';
+  return m;
+}
+function need(name) {
+  if (!(name in g)) throw new Error(`${name} non è disponibile in questo browser. Vedi «Stato e setup».`);
+  return g[name];
+}
+async function stream(iter, out) {
+  out.textContent = '';
+  let acc = '';
+  for await (const chunk of iter) {
+    acc += chunk; // i chunk sono incrementali (delta)
+    out.textContent = acc;
+  }
+  return acc;
+}
+async function busy(btn, fn) {
+  btn.disabled = true;
+  try { await fn(); } finally { btn.disabled = false; }
+}
+
+/* ---------- status ---------- */
+const APIS = [
+  { name: 'LanguageModel', label: 'Prompt API', opts: {} },
+  { name: 'Summarizer', label: 'Summarizer', opts: {} },
+  { name: 'Translator', label: 'Translator', opts: { sourceLanguage: 'en', targetLanguage: 'it' } },
+  { name: 'LanguageDetector', label: 'Language Detector', opts: {} },
+  { name: 'Writer', label: 'Writer', opts: {} },
+  { name: 'Rewriter', label: 'Rewriter', opts: {} },
+  { name: 'Proofreader', label: 'Proofreader', opts: {} },
+];
+async function checkStatus() {
+  $('ctxInfo').textContent = `Contesto sicuro: ${isSecureContext ? 'sì' : 'NO'} · ${navigator.userAgentData?.brands?.map(b => b.brand + ' ' + b.version).join(', ') || navigator.userAgent}`;
+  const grid = $('apiGrid'); grid.innerHTML = '';
+  const timeout = ms => new Promise(r => setTimeout(() => r('timeout'), ms));
+  await Promise.all(APIS.map(async a => {
+    const div = document.createElement('div'); div.className = 'api';
+    div.innerHTML = `<b>${a.label}</b><code>${a.name}</code><br><span class="badge">verifica…</span>`;
+    grid.append(div);
+    let st = 'missing';
+    if (a.name in g) {
+      try { st = await Promise.race([g[a.name].availability(a.opts), timeout(5000)]); } catch (e) { st = 'unavailable'; }
+    }
+    const label = { missing: 'non esposta', timeout: 'nessuna risposta' }[st] || st;
+    div.querySelector('.badge').className = `badge ${st === 'timeout' ? 'unavailable' : st}`;
+    div.querySelector('.badge').textContent = label;
+  }));
+  if ('LanguageModel' in g && LanguageModel.params) {
+    try {
+      const p = await LanguageModel.params();
+      $('temp').placeholder = `def ${p.defaultTemperature}`; $('temp').max = p.maxTemperature;
+      $('topk').placeholder = `def ${p.defaultTopK}`; $('topk').max = p.maxTopK;
+    } catch {}
+  }
+}
+$('refresh').onclick = checkStatus;
+$('dlBtn').onclick = () => busy($('dlBtn'), async () => {
+  try {
+    const s = await need('LanguageModel').create({ monitor: monitor() });
+    $('dlTxt').textContent = '✅ Gemini Nano pronto.'; $('dlProg').value = 1;
+    s.destroy(); checkStatus();
+  } catch (e) { $('dlTxt').textContent = errMsg(e); }
+});
+
+/* ---------- diagnostica ---------- */
+const DIAG = [
+  ['LanguageModel', 'nessuna opzione', {}],
+  ['LanguageModel', 'output en', { expectedOutputs: [{ type: 'text', languages: ['en'] }] }],
+  ['LanguageModel', 'output it', { expectedOutputs: [{ type: 'text', languages: ['it'] }] }],
+  ['LanguageModel', 'input immagine', { expectedInputs: [{ type: 'image' }] }],
+  ['Summarizer', 'default', {}],
+  ['Summarizer', 'output en', { outputLanguage: 'en' }],
+  ['LanguageDetector', 'default', {}],
+  ['Translator', 'en→it', { sourceLanguage: 'en', targetLanguage: 'it' }],
+  ['Writer', 'default', {}],
+  ['Rewriter', 'default', {}],
+  ['Proofreader', 'en', { expectedInputLanguages: ['en'] }],
+];
+$('diagBtn').onclick = () => busy($('diagBtn'), async () => {
+  const out = $('diagOut');
+  const lines = [`UA: ${navigator.userAgent}`, `Contesto sicuro: ${isSecureContext}`, ''];
+  out.textContent = lines.join('\n');
+  const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout ${ms / 1000}s`)), ms))]);
+  for (const [api, label, opts] of DIAG) {
+    let line = `${api} [${label}]: `;
+    if (!(api in g)) { line += 'non esposta'; }
+    else {
+      try {
+        const av = await withTimeout(g[api].availability(opts), 5000);
+        line += `availability=${av}`;
+        if (av === 'available') {
+          const inst = await withTimeout(g[api].create(opts), 20000);
+          line += ' · create OK'; inst.destroy?.();
+        }
+      } catch (e) { line += ` · ✗ ${e.name}: ${e.message}`; }
+    }
+    lines.push(line); out.textContent = lines.join('\n');
+  }
+  lines.push('', 'Controlla anche chrome://on-device-internals → Model Status (versione modello e funzioni supportate).');
+  out.textContent = lines.join('\n');
+});
+
+/* ---------- chat ---------- */
+let session = null, ctrl = null, pendingImg = null;
+function addMsg(role, text, img) {
+  const d = document.createElement('div'); d.className = `msg ${role}`; d.textContent = text;
+  if (img) { const i = document.createElement('img'); i.src = URL.createObjectURL(img); d.append(i); }
+  $('chatLog').append(d); $('chatLog').scrollTop = 1e9; return d;
+}
+function updUsage() {
+  if (!session) return;
+  // Chrome 155+: contextUsage/contextWindow; versioni precedenti: inputUsage/inputQuota o tokensSoFar/maxTokens
+  const used = session.contextUsage ?? session.inputUsage ?? session.tokensSoFar;
+  const quota = session.contextWindow ?? session.inputQuota ?? session.maxTokens;
+  const parts = ['Sessione attiva'];
+  if (session.temperature != null) parts.push(`temperatura ${session.temperature}`);
+  if (session.topK != null) parts.push(`topK ${session.topK}`);
+  parts.push(`token contesto ${used}/${quota}`);
+  $('sessInfo').textContent = parts.join(' · ');
+}
+async function newSession() {
+  session?.destroy(); session = null;
+  const LM = need('LanguageModel');
+  const opts = { monitor: monitor($('sessInfo')) };
+  const sys = $('sysPrompt').value.trim();
+  if (sys) opts.initialPrompts = [{ role: 'system', content: sys }];
+  const t = $('temp').value, k = $('topk').value;
+  if (t || k) { // vanno specificati entrambi
+    const p = await LM.params?.() ?? {};
+    opts.temperature = t ? +t : p.defaultTemperature;
+    opts.topK = k ? +k : p.defaultTopK;
+  }
+  const lang = $('outLang').value;
+  opts.expectedInputs = [{ type: 'text' }];
+  if ($('useImg').checked) opts.expectedInputs.push({ type: 'image' });
+  if (lang) opts.expectedOutputs = [{ type: 'text', languages: [lang] }];
+  try { session = await LM.create(opts); }
+  catch (e) {
+    if (!lang) throw e;
+    addMsg('system', `Lingua «${lang}» non supportata come output dichiarato: riprovo senza vincolo.`);
+    delete opts.expectedOutputs; session = await LM.create(opts);
+  }
+  $('imgBtn').disabled = !$('useImg').checked;
+  $('chatLog').innerHTML = ''; addMsg('system', 'Nuova sessione creata.'); updUsage();
+}
+$('newSession').onclick = () => busy($('newSession'), async () => {
+  try { await newSession(); } catch (e) { $('sessInfo').textContent = errMsg(e); }
+});
+$('imgBtn').onclick = () => $('imgIn').click();
+$('imgIn').onchange = () => { pendingImg = $('imgIn').files[0] || null; $('imgName').textContent = pendingImg?.name || ''; };
+$('stopBtn').onclick = () => ctrl?.abort();
+async function send() {
+  const text = $('chatIn').value.trim(); if (!text && !pendingImg) return;
+  try { if (!session) await newSession(); } catch (e) { addMsg('system', errMsg(e)); return; }
+  const img = pendingImg; pendingImg = null; $('imgName').textContent = ''; $('imgIn').value = '';
+  addMsg('user', text, img); $('chatIn').value = '';
+  const input = img
+    ? [{ role: 'user', content: [{ type: 'text', value: text || 'Descrivi questa immagine.' }, { type: 'image', value: img }] }]
+    : text;
+  const opts = {};
+  const sch = $('schema').value.trim();
+  if (sch) { try { opts.responseConstraint = JSON.parse(sch); } catch { addMsg('system', 'JSON Schema non valido: ignorato.'); } }
+  ctrl = new AbortController(); opts.signal = ctrl.signal;
+  $('sendBtn').disabled = true; $('stopBtn').disabled = false;
+  const out = addMsg('assistant', '…');
+  const t0 = performance.now();
+  try {
+    await stream(session.promptStreaming(input, opts), out);
+    addMsg('system', `${((performance.now() - t0) / 1000).toFixed(1)} s`);
+  } catch (e) { out.textContent += `\n${e.name === 'AbortError' ? '⏹ interrotto' : errMsg(e)}`; }
+  finally { $('sendBtn').disabled = false; $('stopBtn').disabled = true; updUsage(); }
+}
+$('sendBtn').onclick = send;
+$('chatIn').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); });
+
+/* ---------- summarizer ---------- */
+$('sumBtn').onclick = () => busy($('sumBtn'), async () => {
+  const out = $('sumOut');
+  try {
+    const S = need('Summarizer');
+    const s = await S.create({
+      type: $('sumType').value, length: $('sumLen').value, format: $('sumFmt').value,
+      sharedContext: $('sumCtx').value || undefined, outputLanguage: $('sumLang').value,
+      monitor: monitor(out),
+    });
+    await stream(s.summarizeStreaming($('sumIn').value), out);
+    s.destroy();
+  } catch (e) { out.textContent = errMsg(e); }
+});
+
+/* ---------- translator ---------- */
+const LANGS = { it: 'Italiano', en: 'Inglese', es: 'Spagnolo', fr: 'Francese', de: 'Tedesco', pt: 'Portoghese', nl: 'Olandese', ja: 'Giapponese', zh: 'Cinese', ko: 'Coreano', ru: 'Russo', ar: 'Arabo', hi: 'Hindi', pl: 'Polacco', tr: 'Turco' };
+for (const [c, n] of Object.entries(LANGS)) { $('trFrom').add(new Option(n, c)); $('trTo').add(new Option(n, c)); }
+$('trTo').value = 'en';
+async function detect(text) {
+  const d = await need('LanguageDetector').create({ monitor: monitor() });
+  const r = await d.detect(text); d.destroy(); return r;
+}
+$('detBtn').onclick = () => busy($('detBtn'), async () => {
+  try {
+    const r = await detect($('trIn').value);
+    $('trOut').textContent = r.slice(0, 5).map(x => `${LANGS[x.detectedLanguage] || x.detectedLanguage}: ${(x.confidence * 100).toFixed(1)}%`).join('\n');
+  } catch (e) { $('trOut').textContent = errMsg(e); }
+});
+$('trBtn').onclick = () => busy($('trBtn'), async () => {
+  const out = $('trOut');
+  try {
+    let src = $('trFrom').value; const text = $('trIn').value;
+    if (src === 'auto') { src = (await detect(text))[0].detectedLanguage; }
+    const tgt = $('trTo').value;
+    if (src === tgt) { out.textContent = text; return; }
+    const T = need('Translator');
+    const av = await T.availability({ sourceLanguage: src, targetLanguage: tgt });
+    if (av === 'unavailable') throw new Error(`Coppia ${src}→${tgt} non supportata.`);
+    const t = await T.create({ sourceLanguage: src, targetLanguage: tgt, monitor: monitor(out) });
+    await stream(t.translateStreaming(text), out);
+    out.textContent = `[${src}→${tgt}]\n` + out.textContent;
+    t.destroy();
+  } catch (e) { out.textContent = errMsg(e); }
+});
+
+/* ---------- writer / rewriter ---------- */
+$('wBtn').onclick = () => busy($('wBtn'), async () => {
+  const out = $('wOut');
+  try {
+    const w = await need('Writer').create({ tone: $('wTone').value, length: $('wLen').value, format: $('wFmt').value, monitor: monitor(out) });
+    await stream(w.writeStreaming($('wIn').value, { context: $('wCtx').value || undefined }), out);
+    w.destroy();
+  } catch (e) { out.textContent = errMsg(e); }
+});
+$('rwBtn').onclick = () => busy($('rwBtn'), async () => {
+  const out = $('rwOut');
+  try {
+    const r = await need('Rewriter').create({ tone: $('rwTone').value, length: $('rwLen').value, format: $('rwFmt').value, monitor: monitor(out) });
+    await stream(r.rewriteStreaming($('rwIn').value, { context: $('rwCtx').value || undefined }), out);
+    r.destroy();
+  } catch (e) { out.textContent = errMsg(e); }
+});
+
+/* ---------- proofreader ---------- */
+$('pfBtn').onclick = () => busy($('pfBtn'), async () => {
+  const text = $('pfIn').value;
+  try {
+    const p = await need('Proofreader').create({ expectedInputLanguages: ['en'], monitor: monitor($('pfOut')) });
+    const r = await p.proofread(text); p.destroy();
+    $('pfOut').textContent = r.correctedInput ?? r.corrected ?? '';
+    const box = $('pfMarked'); box.innerHTML = '';
+    let i = 0;
+    for (const c of [...(r.corrections || [])].sort((a, b) => a.startIndex - b.startIndex)) {
+      box.append(text.slice(i, c.startIndex));
+      const m = document.createElement('mark');
+      m.textContent = text.slice(c.startIndex, c.endIndex);
+      m.title = `→ ${c.correction}${c.type ? ` (${c.type})` : ''}${c.explanation ? `: ${c.explanation}` : ''}`;
+      box.append(m); i = c.endIndex;
+    }
+    box.append(text.slice(i));
+    if (!r.corrections?.length) box.textContent = 'Nessun errore trovato.';
+  } catch (e) { $('pfOut').textContent = errMsg(e); }
+});
+
+checkStatus();
+</script>
+</body>
+</html>

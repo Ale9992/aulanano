@@ -1,0 +1,82 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Gemini Nano worker</title>
+<script>
+// Eseguita da Chrome headless sul server. Riceve richieste dal bridge (via CDP)
+// e risponde chiamando la binding __emit.
+const API_NAMES = ['LanguageModel', 'Summarizer', 'Translator', 'LanguageDetector', 'Writer', 'Rewriter', 'Proofreader'];
+const instances = new Map();
+const controllers = new Map();
+let seq = 0;
+
+const emit = (id, type, data) => globalThis.__emit(JSON.stringify({ id, type, data }));
+const props = o => ({ inputUsage: o.inputUsage, inputQuota: o.inputQuota, contextUsage: o.contextUsage, contextWindow: o.contextWindow, temperature: o.temperature, topK: o.topK });
+const errData = e => ({ name: e?.name || 'Error', message: e?.message || String(e) });
+
+// Ricostruisce i Blob (immagini) serializzati come { __blob: dataURL }
+async function revive(x) {
+  if (Array.isArray(x)) return Promise.all(x.map(revive));
+  if (x && typeof x === 'object') {
+    if (x.__blob) return (await fetch(x.__blob)).blob();
+    const o = {};
+    for (const k of Object.keys(x)) o[k] = await revive(x[k]);
+    return o;
+  }
+  return x;
+}
+
+globalThis.__handle = async req => {
+  const { id } = req;
+  const ctrl = new AbortController();
+  controllers.set(id, ctrl);
+  try {
+    let r = null;
+    switch (req.op) {
+      case 'apis':
+        r = API_NAMES.filter(n => n in globalThis); break;
+      case 'info':
+        r = { ua: navigator.userAgent, secure: isSecureContext }; break;
+      case 'availability':
+        r = await globalThis[req.api].availability(await revive(req.opts || {})); break;
+      case 'params':
+        r = (await globalThis.LanguageModel?.params?.()) ?? null; break;
+      case 'create': {
+        const opts = await revive(req.opts || {});
+        opts.signal = ctrl.signal;
+        opts.monitor = m => m.addEventListener('downloadprogress', e => emit(id, 'progress', { loaded: e.loaded, total: e.total }));
+        const o = await globalThis[req.api].create(opts);
+        const inst = 'i' + (++seq);
+        instances.set(inst, o);
+        r = { inst, props: props(o) };
+        break;
+      }
+      case 'call': {
+        const o = instances.get(req.inst);
+        if (!o) throw new DOMException('Sessione non trovata sul server (Chrome riavviato?): creane una nuova.', 'InvalidStateError');
+        const args = await revive(req.args || []);
+        const options = { ...(await revive(req.options || {})), signal: ctrl.signal };
+        const out = o[req.method](...args, options);
+        if (req.stream) {
+          for await (const chunk of out) emit(id, 'chunk', chunk);
+          r = { value: null, props: props(o) };
+        } else {
+          r = { value: await out, props: props(o) };
+        }
+        break;
+      }
+      case 'destroy':
+        instances.get(req.inst)?.destroy(); instances.delete(req.inst); break;
+      case 'abort':
+        controllers.get(req.target)?.abort(); break;
+      default:
+        throw new Error('op sconosciuta: ' + req.op);
+    }
+    emit(id, 'result', r);
+  } catch (e) {
+    emit(id, 'error', errData(e));
+  } finally {
+    controllers.delete(id);
+  }
+};
+</script>
+<p>Worker Gemini Nano attivo.</p>
